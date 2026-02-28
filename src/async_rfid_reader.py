@@ -1,19 +1,19 @@
 import asyncio
-from asyncio.streams import StreamWriter
 import logging
 import re
-import serial
-import serial_asyncio
 from typing import cast
 from typing import Optional
-from .constants import Command, InfoVersion
+
+import serial
+import serial_asyncio
+
+from .constants import Command
+from .constants import InfoVersion
 from .rfid_reader import RFIDReader
-from .utils import (
-    create_packet,
-    extract_text_from_hex,
-    parse_tag,
-    verify_checksum,
-)
+from .utils import create_packet
+from .utils import extract_text_from_hex
+from .utils import parse_tag
+from .utils import verify_checksum
 
 
 logger = logging.getLogger(__name__)
@@ -197,13 +197,15 @@ class AsyncRFIDReader(RFIDReader):
         try:
             await self.async_send_command(Command.GET_POWER)
             buffer = await self.async_read_hex()
-            if buffer.startswith(
-                Command.GENERAL_NOTIFICATION_HEADER.value.hex()
-            ) and verify_checksum(buffer):
-                power = int(buffer[10:14], 16)
-                return power / 100
-            else:
+            logger.info(f"GET_POWER raw buffer: '{buffer}'")
+            if not buffer.startswith(Command.GENERAL_NOTIFICATION_HEADER.value.hex()):
+                logger.info("GET_POWER: prefix check failed")
                 return None
+            if not verify_checksum(buffer):
+                logger.info("GET_POWER: checksum verification failed")
+                return None
+            power = int(buffer[10:14], 16)
+            return power / 100
         except Exception as e:
             logger.exception(f"Error getting power: {e}")
             return None
