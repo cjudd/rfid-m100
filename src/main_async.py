@@ -95,9 +95,9 @@ async def main():
             elif choice == "3":
                 power = await reader.async_get_power()
                 if power:
-                    print(f"Transmit Power: {power} dBm")
+                    print(f"\nTransmit Power: {power} dBm")
                 else:
-                    print("Failed to get power")
+                    print("\nFailed to get power")
             elif choice.lower() == "q":
                 break
             else:

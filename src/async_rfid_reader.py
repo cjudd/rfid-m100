@@ -197,14 +197,24 @@ class AsyncRFIDReader(RFIDReader):
         try:
             await self.async_send_command(Command.GET_POWER)
             buffer = await self.async_read_hex()
-            logger.info(f"GET_POWER raw buffer: '{buffer}'")
-            if not buffer.startswith(Command.GENERAL_NOTIFICATION_HEADER.value.hex()):
-                logger.info("GET_POWER: prefix check failed")
+            # Response frame has type=01, command=b7; search for it in the
+            # buffer since leftover notification frames may precede it
+            response_prefix = (
+                Command.GENERAL_NOTIFICATION_HEADER.value.hex()
+                + "01"
+                + Command.GET_POWER.value.hex()
+            )
+            pos = buffer.find(response_prefix)
+            if pos == -1:
+                logger.debug("GET_POWER: response frame not found in buffer")
                 return None
-            if not verify_checksum(buffer):
-                logger.info("GET_POWER: checksum verification failed")
+            payload_len = int(buffer[pos + 6 : pos + 10], 16)
+            frame_len = 14 + payload_len * 2  # fixed overhead (7 bytes) + payload
+            frame = buffer[pos : pos + frame_len]
+            if not verify_checksum(frame):
+                logger.debug(f"GET_POWER: checksum failed for frame '{frame}'")
                 return None
-            power = int(buffer[10:14], 16)
+            power = int(frame[10:14], 16)
             return power / 100
         except Exception as e:
             logger.exception(f"Error getting power: {e}")
