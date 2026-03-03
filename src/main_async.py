@@ -3,7 +3,6 @@ import asyncio
 import logging
 import sys
 
-
 from .async_rfid_reader import AsyncRFIDReader
 
 logging.basicConfig(
@@ -23,7 +22,7 @@ async def single_tag_mode(reader: AsyncRFIDReader):
                 print("\nTag detected!")
                 print_tag(tag)
             await asyncio.sleep(0.1)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, asyncio.CancelledError):
         print("\nReturning to menu...")
 
 
@@ -45,7 +44,7 @@ async def inventory_mode(reader: AsyncRFIDReader):
                 print("No tags found")
 
             await asyncio.sleep(0.5)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, asyncio.CancelledError):
         print("\nReturning to menu...")
 
 
@@ -69,7 +68,7 @@ def print_menu():
 
 async def main():
     # Initialize the RFID reader
-    reader = AsyncRFIDReader(port="/dev/ttyUSB0")
+    reader = AsyncRFIDReader(port="/dev/tty.usbserial-144320")
 
     try:
         # Connect to the reader
@@ -104,6 +103,8 @@ async def main():
             else:
                 print("\nInvalid choice. Please try again.")
 
+    except KeyboardInterrupt:
+        print("\nInterrupted")
     except Exception as e:
         print(f"An error occurred: {e}")
     finally:
