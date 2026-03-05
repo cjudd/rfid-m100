@@ -135,17 +135,20 @@ class AsyncRFIDReader(RFIDReader):
         try:
             await self.async_send_command(Command.GET_SINGLE_POOLING, time_wait=0.4)
             buffer = await self.async_read_hex()
-            # verify output is valid - card found
-            if buffer.startswith(
-                Command.NOTIFICATION_POOLING.value.hex()
-            ) and verify_checksum(buffer):
-                tag = parse_tag(buffer)
-                if tag:
-                    tid = await self.async_read_tid(tag["epc"])
-                    tag["tid"] = tid or ""
-                return tag
-            else:
+            prefix = Command.NOTIFICATION_POOLING.value.hex()
+            pos = buffer.find(prefix)
+            if pos == -1:
                 return None
+            payload_len = int(buffer[pos + 6 : pos + 10], 16)
+            frame_len = 14 + payload_len * 2
+            frame = buffer[pos : pos + frame_len]
+            if len(frame) < frame_len or not verify_checksum(frame):
+                return None
+            tag = parse_tag(frame)
+            if tag:
+                tid = await self.async_read_tid(tag["epc"])
+                tag["tid"] = tid or ""
+            return tag
         except Exception as e:
             logger.exception(f"Error reading tag: {e}")
             return None
