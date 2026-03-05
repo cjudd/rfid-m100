@@ -15,6 +15,7 @@ def print_tag(tag: dict[str, str]):
     """Helper function to print tag information"""
     print(f"PC: {tag['pc']}")
     print(f"EPC: {tag['epc']}")
+    print(f"TID: {tag.get('tid') or 'N/A'}")
     print(f"RSSI: {tag['rssi']} dBm")
     print(f"CRC: {tag['crc']}")
 
@@ -68,7 +69,7 @@ def inventory_mode(reader: RFIDReader):
 
 def main():
     # Initialize the RFID reader
-    reader = RFIDReader(port="/dev/ttyUSB0")
+    reader = RFIDReader(port="/dev/tty.usbserial-144320")
 
     try:
         # Connect to the reader

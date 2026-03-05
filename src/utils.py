@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from typing import Optional
-from .constants import Command, PacketType, MIN_RSSI
+
+from .constants import Command
+from .constants import MIN_RSSI
+from .constants import PacketType
 
 
 @dataclass
@@ -92,6 +95,20 @@ def pack_frame(packet) -> bytes:
     pbuf += packet.checksum if packet.checksum is not None else b"\x00"
     pbuf += packet.tail
     return pbuf
+
+
+def parse_tid(buffer: str) -> Optional[str]:
+    """Extract TID hex string from a Read Memory (0x39) response frame."""
+    response_prefix = "bb0139"
+    pos = buffer.find(response_prefix)
+    if pos == -1:
+        return None
+    payload_len = int(buffer[pos + 6 : pos + 10], 16)
+    frame_len = 14 + payload_len * 2
+    frame = buffer[pos : pos + frame_len]
+    if len(frame) < frame_len or not verify_checksum(frame):
+        return None
+    return frame[10 : 10 + payload_len * 2]
 
 
 def parse_tag(data: str) -> Optional[dict[str, str]]:

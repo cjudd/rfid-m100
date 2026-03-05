@@ -9,10 +9,12 @@ import serial_asyncio
 
 from .constants import Command
 from .constants import InfoVersion
+from .constants import MemoryBank
 from .rfid_reader import RFIDReader
 from .utils import create_packet
 from .utils import extract_text_from_hex
 from .utils import parse_tag
+from .utils import parse_tid
 from .utils import verify_checksum
 
 
@@ -137,11 +139,36 @@ class AsyncRFIDReader(RFIDReader):
             if buffer.startswith(
                 Command.NOTIFICATION_POOLING.value.hex()
             ) and verify_checksum(buffer):
-                return parse_tag(buffer)
+                tag = parse_tag(buffer)
+                if tag:
+                    tid = await self.async_read_tid(tag["epc"])
+                    tag["tid"] = tid or ""
+                return tag
             else:
                 return None
         except Exception as e:
             logger.exception(f"Error reading tag: {e}")
+            return None
+
+    async def async_read_tid(self, epc_hex: str) -> Optional[str]:
+        """Read TID memory bank from a specific tag identified by its EPC."""
+        try:
+            epc_bytes = bytes.fromhex(epc_hex)
+            epc_word_count = len(epc_bytes) // 2
+            payload = (
+                bytes([epc_word_count])
+                + epc_bytes
+                + MemoryBank.TID.value
+                + b"\x00"  # word pointer = 0
+                + b"\x06"  # read 6 words (12 bytes)
+                + b"\x00\x00\x00\x00"  # access password
+            )
+            await self.async_send_command(Command.READ_MEMORY, payload, time_wait=0.2)
+            buffer = await self.async_read_hex()
+            logger.debug(f"READ_TID raw buffer: '{buffer}'")
+            return parse_tid(buffer)
+        except Exception as e:
+            logger.exception(f"Error reading TID: {e}")
             return None
 
     async def async_inventory(self) -> list[dict[str, str]]:

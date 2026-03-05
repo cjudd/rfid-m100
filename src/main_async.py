@@ -6,7 +6,7 @@ import sys
 from .async_rfid_reader import AsyncRFIDReader
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 
@@ -52,6 +52,7 @@ def print_tag(tag: dict[str, str]):
     """Helper function to print tag information"""
     print(f"PC: {tag['pc']}")
     print(f"EPC: {tag['epc']}")
+    print(f"TID: {tag.get('tid') or 'N/A'}")
     print(f"RSSI: {tag['rssi']} dBm")
     print(f"CRC: {tag['crc']}")
 

@@ -1,19 +1,18 @@
 import logging
 import re
 import time
-
 from typing import Optional
-from .utils import (
-    create_packet,
-    extract_text_from_hex,
-    parse_tag,
-    verify_checksum,
-)
 
 import serial
 
 from .constants import Command
 from .constants import InfoVersion
+from .constants import MemoryBank
+from .utils import create_packet
+from .utils import extract_text_from_hex
+from .utils import parse_tag
+from .utils import parse_tid
+from .utils import verify_checksum
 
 logger = logging.getLogger(__name__)
 
@@ -129,12 +128,36 @@ class RFIDReader:
             if buffer.startswith(
                 Command.NOTIFICATION_POOLING.value.hex()
             ) and verify_checksum(buffer):
-                return parse_tag(buffer)
+                tag = parse_tag(buffer)
+                if tag:
+                    tag["tid"] = self.read_tid(tag["epc"]) or ""
+                return tag
 
             return None
 
         except Exception as e:
             logger.exception(f"Error reading tag: {e}")
+            return None
+
+    def read_tid(self, epc_hex: str) -> Optional[str]:
+        """Read TID memory bank from a specific tag identified by its EPC."""
+        try:
+            epc_bytes = bytes.fromhex(epc_hex)
+            epc_word_count = len(epc_bytes) // 2
+            payload = (
+                bytes([epc_word_count])
+                + epc_bytes
+                + MemoryBank.TID.value
+                + b"\x00"  # word pointer = 0
+                + b"\x06"  # read 6 words (12 bytes)
+                + b"\x00\x00\x00\x00"  # access password
+            )
+            self.send_command(Command.READ_MEMORY, payload, time_wait=0.2)
+            buffer = self._read_hex()
+            logger.debug(f"READ_TID raw buffer: '{buffer}'")
+            return parse_tid(buffer)
+        except Exception as e:
+            logger.exception(f"Error reading TID: {e}")
             return None
 
     def inventory(self, timeout: float = 1.0) -> list[dict[str, str]]:

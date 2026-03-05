@@ -12,6 +12,7 @@ class Command(Enum):
     GET_INFO = b"\x03"
     GET_POWER = b"\xB7"
     AFHM = b"\xAD"
+    READ_MEMORY = b"\x39"
 
 
 class MemoryBank(Enum):
