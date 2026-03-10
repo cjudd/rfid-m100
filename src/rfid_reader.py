@@ -123,7 +123,9 @@ class RFIDReader:
         try:
             self.send_command(Command.GET_SINGLE_POOLING, time_wait=0.4)
             buffer = self._read_hex()
-            prefix = Command.NOTIFICATION_POOLING.value.hex()
+            # Search for head+type+command only; exclude length bytes so tags
+            # with non-96-bit EPCs (different payload length) are still matched
+            prefix = Command.NOTIFICATION_POOLING.value.hex()[:6]
             pos = buffer.find(prefix)
             if pos == -1:
                 return None
@@ -183,21 +185,17 @@ class RFIDReader:
             # Read response
             buffer = self._read_hex()
             # Parse multiple tag response
-            if buffer.startswith(Command.NOTIFICATION_POOLING.value.hex()):
+            prefix = Command.NOTIFICATION_POOLING.value.hex()[:6]
+            if buffer.startswith(prefix):
                 logger.debug("Prefix matched successfully")
                 # Get number of tags from response
-                positions = [
-                    m.start()
-                    for m in re.finditer(
-                        re.escape(Command.NOTIFICATION_POOLING.value.hex()), buffer
-                    )
-                ]
+                positions = [m.start() for m in re.finditer(re.escape(prefix), buffer)]
                 boundaries = list(zip(positions, positions[1:] + [len(buffer)]))
                 # Parse each tag
                 for i in range(0, len(positions)):
                     start, end = boundaries[i]
-                    # Minimum length for one tag data is 44 bytes
-                    if (end - start) < 44:
+                    # Minimum length for one tag frame (16-bit EPC) is 30 hex chars
+                    if (end - start) < 30:
                         logger.error(
                             f"Buffer too short at tag {i}. Length: {len(buffer)}, Position: {start}"
                         )  # noqa: E501

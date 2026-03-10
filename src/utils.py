@@ -117,9 +117,12 @@ def parse_tag(data: str) -> Optional[dict[str, str]]:
     if rssi < MIN_RSSI:
         return None
     pc = data[12:16]
-    epc = data[16:40]
-    crc = data[40:44]
-    return {"pc": pc, "epc": epc, "rssi": str(rssi), "crc": str(crc)}
+    # EPC length in words is encoded in bits 15:11 of the PC word
+    epc_word_count = (int(pc, 16) >> 11) & 0x1F
+    epc_hex_len = epc_word_count * 4  # each word = 2 bytes = 4 hex chars
+    epc = data[16 : 16 + epc_hex_len]
+    crc = data[16 + epc_hex_len : 16 + epc_hex_len + 4]
+    return {"pc": pc, "epc": epc, "rssi": str(rssi), "crc": crc}
 
 
 def create_packet(command: Command, payload: Optional[bytes] = None) -> bytes:
