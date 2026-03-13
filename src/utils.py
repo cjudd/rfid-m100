@@ -188,7 +188,11 @@ def decode_tid_serial(tid_hex: str) -> str:
 
 
 def parse_tid(buffer: str) -> Optional[str]:
-    """Extract TID hex string from a Read Memory (0x39) response frame."""
+    """Extract TID hex string from a Read Memory (0x39) response frame.
+
+    Response payload format: [pc_epc_len: 1 byte][PC: 2 bytes][EPC: N bytes][TID data]
+    where pc_epc_len = byte count of (PC + EPC).
+    """
     response_prefix = "bb0139"
     pos = buffer.find(response_prefix)
     if pos == -1:
@@ -198,7 +202,11 @@ def parse_tid(buffer: str) -> Optional[str]:
     frame = buffer[pos : pos + frame_len]
     if len(frame) < frame_len or not verify_checksum(frame):
         return None
-    return frame[10 : 10 + payload_len * 2]
+    payload = frame[10 : 10 + payload_len * 2]
+    # Skip the PC+EPC header: 1 length byte + pc_epc_len bytes of PC+EPC
+    pc_epc_len = int(payload[0:2], 16)
+    data_start = (1 + pc_epc_len) * 2
+    return payload[data_start:] or None
 
 
 def parse_tag(data: str) -> Optional[dict[str, str]]:
