@@ -4,9 +4,12 @@ import logging
 import sys
 
 from .async_rfid_reader import AsyncRFIDReader
+from .utils import decode_tid_manufacturer
+from .utils import decode_tid_model
+from .utils import decode_tid_serial
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 
@@ -50,11 +53,16 @@ async def inventory_mode(reader: AsyncRFIDReader):
 
 def print_tag(tag: dict[str, str]):
     """Helper function to print tag information"""
-    print(f"PC: {tag['pc']}")
-    print(f"EPC: {tag['epc']}")
-    print(f"TID: {tag.get('tid') or 'N/A'}")
-    print(f"RSSI: {tag['rssi']} dBm")
-    print(f"CRC: {tag['crc']}")
+    print(f"PC:           {tag['pc']}")
+    print(f"EPC:          {tag['epc']}")
+    tid = tag.get("tid") or ""
+    print(f"TID:          {tid or 'N/A'}")
+    if tid:
+        print(f"  Manufacturer: {decode_tid_manufacturer(tid)}")
+        print(f"  Model:        {decode_tid_model(tid)}")
+        print(f"  Serial:       {decode_tid_serial(tid)}")
+    print(f"RSSI:         {tag['rssi']} dBm")
+    print(f"CRC:          {tag['crc']}")
 
 
 def print_menu():

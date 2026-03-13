@@ -136,25 +136,21 @@ class RFIDReader:
                 return None
             tag = parse_tag(frame)
             if tag:
-                tag["tid"] = self.read_tid(tag["epc"]) or ""
+                tag["tid"] = self.read_tid() or ""
             return tag
 
         except Exception as e:
             logger.exception(f"Error reading tag: {e}")
             return None
 
-    def read_tid(self, epc_hex: str) -> Optional[str]:
-        """Read TID memory bank from a specific tag identified by its EPC."""
+    def read_tid(self) -> Optional[str]:
+        """Read TID memory bank from the currently singulated tag."""
         try:
-            epc_bytes = bytes.fromhex(epc_hex)
-            epc_word_count = len(epc_bytes) // 2
             payload = (
-                bytes([epc_word_count])
-                + epc_bytes
-                + MemoryBank.TID.value
-                + b"\x00"  # word pointer = 0
-                + b"\x06"  # read 6 words (12 bytes)
-                + b"\x00\x00\x00\x00"  # access password
+                b"\x00\x00\x00\x00"  # access password (all zeros)
+                + MemoryBank.TID.value  # memory bank: TID = 0x02
+                + b"\x00\x00"  # word pointer = 0 (2 bytes)
+                + b"\x00\x06"  # read 6 words = 12 bytes (2 bytes)
             )
             self.send_command(Command.READ_MEMORY, payload, time_wait=0.2)
             buffer = self._read_hex()
@@ -212,6 +208,18 @@ class RFIDReader:
                 logger.info(f"Number of tags found: {len(tags)}")
             else:
                 logger.debug("Prefix match failed")
+
+            # Read TID for each discovered tag by singulating one at a time
+            remaining = set(tags.keys())
+            max_attempts = len(remaining) * 5 + 5
+            for _ in range(max_attempts):
+                if not remaining:
+                    break
+                tag = self.read_tag()
+                if tag and tag["epc"] in remaining:
+                    tags[tag["epc"]]["tid"] = tag.get("tid", "")
+                    remaining.discard(tag["epc"])
+
             return list(tags.values())
 
         except Exception as e:

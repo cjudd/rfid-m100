@@ -97,6 +97,96 @@ def pack_frame(packet) -> bytes:
     return pbuf
 
 
+_MDID_MANUFACTURERS: dict[int, str] = {
+    0x001: "NXP Semiconductors",  # UCODE 5
+    0x003: "NXP Semiconductors",  # UCODE 7/8
+    0x006: "EM Microelectronic",
+    0x007: "Motorola",
+    0x008: "Alien Technology",
+    0x009: "Alien Technology",
+    0x00B: "Philips Semiconductor",
+    0x00C: "Texas Instruments",
+    0x00E: "Atmel",
+    0x011: "Quanray Electronics",
+    0x012: "NXP Semiconductors",
+    0x800: "Impinj",
+    0x801: "Impinj",  # Monza series
+    0x802: "Impinj",
+    0x803: "Impinj",
+    0x806: "Alien Technology",  # Higgs series
+    0x807: "Alien Technology",
+    0x80A: "Invengo",
+    0x80D: "CAEN RFID",
+}
+
+
+_MDN_MODELS: dict[int, dict[int, str]] = {
+    0x801: {  # Impinj Monza
+        0x100: "Monza 4D",
+        0x101: "Monza 4QT",
+        0x102: "Monza 4E",
+        0x105: "Monza 4i",
+        0x110: "Monza 5",
+        0x120: "Monza R6",
+        0x130: "Monza R6-P",
+        0x150: "Monza R6-A",
+        0x170: "M700",
+        0x175: "M730",
+    },
+    0x003: {  # NXP UCODE
+        0x400: "UCODE 6",
+        0x412: "UCODE 7",
+        0x413: "UCODE 7m",
+        0x414: "UCODE 8",
+    },
+    0x806: {  # Alien Higgs
+        0x004: "Higgs-3",
+        0x006: "Higgs-4",
+        0x008: "Higgs-9",
+    },
+}
+
+
+def _tid_mdid_mdn(tid_hex: str) -> tuple[int, int]:
+    byte1 = int(tid_hex[2:4], 16)
+    byte2 = int(tid_hex[4:6], 16)
+    byte3 = int(tid_hex[6:8], 16)
+    mdid = (byte1 << 4) | (byte2 >> 4)
+    mdn = ((byte2 & 0xF) << 8) | byte3
+    return mdid, mdn
+
+
+def decode_tid_manufacturer(tid_hex: str) -> str:
+    """Decode chip manufacturer name from a TID hex string.
+
+    MDID occupies bits 19:8 of the TID:
+      byte 1 (all 8 bits) + upper nibble of byte 2.
+    """
+    if len(tid_hex) < 6 or tid_hex[:2].lower() != "e2":
+        return "Unknown"
+    mdid, _ = _tid_mdid_mdn(tid_hex)
+    return _MDID_MANUFACTURERS.get(mdid, f"Unknown (MDID: {mdid:#05x})")
+
+
+def decode_tid_model(tid_hex: str) -> str:
+    """Decode chip model name from a TID hex string.
+
+    MDN occupies bits 31:20 of the TID:
+      lower nibble of byte 2 + all of byte 3.
+    """
+    if len(tid_hex) < 8 or tid_hex[:2].lower() != "e2":
+        return "Unknown"
+    mdid, mdn = _tid_mdid_mdn(tid_hex)
+    return _MDN_MODELS.get(mdid, {}).get(mdn, f"Unknown (MDN: {mdn:#05x})")
+
+
+def decode_tid_serial(tid_hex: str) -> str:
+    """Return the 64-bit unique serial number (bytes 4-11) as a hex string."""
+    if len(tid_hex) < 24:
+        return ""
+    return tid_hex[8:24]
+
+
 def parse_tid(buffer: str) -> Optional[str]:
     """Extract TID hex string from a Read Memory (0x39) response frame."""
     response_prefix = "bb0139"
