@@ -4,6 +4,7 @@ import logging
 import sys
 
 from .async_rfid_reader import AsyncRFIDReader
+from .utils import decode_epc
 from .utils import decode_tid_manufacturer
 from .utils import decode_tid_model
 from .utils import decode_tid_serial
@@ -55,12 +56,25 @@ def print_tag(tag: dict[str, str]):
     """Helper function to print tag information"""
     print(f"PC:           {tag['pc']}")
     print(f"EPC:          {tag['epc']}")
+    epc_info = decode_epc(tag["epc"])
+    print(f"  Scheme:     {epc_info['scheme']}")
+    if "company_prefix" in epc_info:
+        print(f"  Company:    {epc_info['company_prefix']}")
+        print(f"  Item Ref:   {epc_info['item_reference']}")
+        print(f"  Serial:     {epc_info['serial']}")
+    elif "general_manager" in epc_info:
+        print(f"  Mgr:        {epc_info['general_manager']}")
+        print(f"  Class:      {epc_info['object_class']}")
+        print(f"  Serial:     {epc_info['serial']}")
     tid = tag.get("tid") or ""
     print(f"TID:          {tid or 'N/A'}")
     if tid:
         print(f"  Manufacturer: {decode_tid_manufacturer(tid)}")
         print(f"  Model:        {decode_tid_model(tid)}")
         print(f"  Serial:       {decode_tid_serial(tid)}")
+    user_mem = tag.get("user_memory") or ""
+    if user_mem:
+        print(f"User Mem:     {user_mem}")
     print(f"RSSI:         {tag['rssi']} dBm")
     print(f"CRC:          {tag['crc']}")
 

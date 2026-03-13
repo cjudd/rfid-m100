@@ -15,6 +15,7 @@ from .utils import create_packet
 from .utils import extract_text_from_hex
 from .utils import parse_tag
 from .utils import parse_tid
+from .utils import parse_user_memory
 from .utils import verify_checksum
 
 
@@ -150,6 +151,7 @@ class AsyncRFIDReader(RFIDReader):
             if tag:
                 tid = await self.async_read_tid()
                 tag["tid"] = tid or ""
+                tag["user_memory"] = await self.async_read_user_memory() or ""
             return tag
         except Exception as e:
             logger.exception(f"Error reading tag: {e}")
@@ -170,6 +172,21 @@ class AsyncRFIDReader(RFIDReader):
             return parse_tid(buffer)
         except Exception as e:
             logger.exception(f"Error reading TID: {e}")
+            return None
+
+    async def async_read_user_memory(self) -> Optional[str]:
+        """Read USER memory bank (bank 3) from the currently singulated tag."""
+        try:
+            payload = (
+                b"\x00\x00\x00\x00"  # access password (all zeros)
+                + MemoryBank.USER.value  # memory bank: USER = 0x03
+                + b"\x00\x00"  # word pointer = 0 (2 bytes)
+                + b"\x00\x10"  # read 16 words = 32 bytes (2 bytes)
+            )
+            await self.async_send_command(Command.READ_MEMORY, payload, time_wait=0.2)
+            buffer = await self.async_read_hex()
+            return parse_user_memory(buffer)
+        except Exception:
             return None
 
     async def async_inventory(self) -> list[dict[str, str]]:

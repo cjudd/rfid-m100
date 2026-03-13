@@ -12,6 +12,7 @@ from .utils import create_packet
 from .utils import extract_text_from_hex
 from .utils import parse_tag
 from .utils import parse_tid
+from .utils import parse_user_memory
 from .utils import verify_checksum
 
 logger = logging.getLogger(__name__)
@@ -137,6 +138,7 @@ class RFIDReader:
             tag = parse_tag(frame)
             if tag:
                 tag["tid"] = self.read_tid() or ""
+                tag["user_memory"] = self.read_user_memory() or ""
             return tag
 
         except Exception as e:
@@ -158,6 +160,21 @@ class RFIDReader:
             return parse_tid(buffer)
         except Exception as e:
             logger.exception(f"Error reading TID: {e}")
+            return None
+
+    def read_user_memory(self) -> Optional[str]:
+        """Read USER memory bank (bank 3) from the currently singulated tag."""
+        try:
+            payload = (
+                b"\x00\x00\x00\x00"  # access password (all zeros)
+                + MemoryBank.USER.value  # memory bank: USER = 0x03
+                + b"\x00\x00"  # word pointer = 0 (2 bytes)
+                + b"\x00\x10"  # read 16 words = 32 bytes (2 bytes)
+            )
+            self.send_command(Command.READ_MEMORY, payload, time_wait=0.2)
+            buffer = self._read_hex()
+            return parse_user_memory(buffer)
+        except Exception:
             return None
 
     def inventory(self, timeout: float = 1.0) -> list[dict[str, str]]:

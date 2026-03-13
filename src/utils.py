@@ -184,10 +184,10 @@ def decode_tid_model(tid_hex: str) -> str:
 
 
 def decode_tid_serial(tid_hex: str) -> str:
-    """Return the 64-bit unique serial number (bytes 4-11) as a hex string."""
+    """Return the 48-bit unique serial number (bytes 6-11) as a hex string."""
     if len(tid_hex) < 24:
         return ""
-    return tid_hex[8:24]
+    return tid_hex[12:24]
 
 
 def parse_tid(buffer: str) -> Optional[str]:
@@ -210,6 +210,110 @@ def parse_tid(buffer: str) -> Optional[str]:
     pc_epc_len = int(payload[0:2], 16)
     data_start = (1 + pc_epc_len) * 2
     return payload[data_start:] or None
+
+
+_EPC_SCHEMES: dict[int, str] = {
+    0x2C: "GDTI-96",
+    0x2D: "GSRN-96",
+    0x30: "SGTIN-96",
+    0x31: "SSCC-96",
+    0x32: "SGLN-96",
+    0x33: "GRAI-96",
+    0x34: "GIAI-96",
+    0x35: "GID-96",
+    0x36: "SGTIN-198",
+    0x37: "GSRN-96",
+    0x38: "GDTI-96",
+    0x39: "CPI-96",
+    0x40: "ITIP-96",
+    0x41: "ITIP-110",
+    0x3A: "SGCN-96",
+    0x3B: "GINC",
+    0x3C: "GSIN",
+    0x3D: "SGLN-195",
+    0x3E: "GRAI-170",
+    0x3F: "GSRN-198",
+    0xA9: "DoD UID",
+}
+
+# SGTIN-96 partition → (company_prefix_bits, item_ref_bits, company_digits, item_digits)
+_SGTIN96_PARTITION: dict[int, tuple[int, int, int, int]] = {
+    0: (40, 4, 12, 1),
+    1: (37, 7, 11, 2),
+    2: (34, 10, 10, 3),
+    3: (30, 14, 9, 4),
+    4: (27, 17, 8, 5),
+    5: (24, 20, 7, 6),
+    6: (20, 24, 6, 7),
+}
+
+
+def decode_epc(epc_hex: str) -> dict[str, str]:
+    """Decode an EPC hex string into its GS1 encoding scheme and fields."""
+    if len(epc_hex) < 2:
+        return {"scheme": "Unknown"}
+    try:
+        epc_bytes = bytes.fromhex(epc_hex)
+    except ValueError:
+        return {"scheme": "Unknown"}
+
+    header = epc_bytes[0]
+    scheme = _EPC_SCHEMES.get(header, f"Unknown ({header:#04x})")
+    result: dict[str, str] = {"scheme": scheme}
+
+    if header == 0x30 and len(epc_bytes) == 12:
+        # SGTIN-96: 96-bit integer extraction
+        val = int(epc_hex, 16)
+        # bits 87:85 = filter (3 bits)
+        filter_val = (val >> 85) & 0x7
+        # bits 84:82 = partition (3 bits)
+        partition = (val >> 82) & 0x7
+        if partition in _SGTIN96_PARTITION:
+            cp_bits, ir_bits, cp_digits, ir_digits = _SGTIN96_PARTITION[partition]
+            # company prefix starts at bit 81, width = cp_bits
+            company_prefix = (val >> (82 - cp_bits)) & ((1 << cp_bits) - 1)
+            # item reference follows, width = ir_bits
+            item_ref = (val >> 38) & ((1 << ir_bits) - 1)
+            serial = val & ((1 << 38) - 1)
+            result["filter"] = str(filter_val)
+            result["company_prefix"] = str(company_prefix).zfill(cp_digits)
+            result["item_reference"] = str(item_ref).zfill(ir_digits)
+            result["serial"] = str(serial)
+
+    elif header == 0x35 and len(epc_bytes) == 12:
+        # GID-96
+        val = int(epc_hex, 16)
+        general_manager = (val >> 60) & ((1 << 28) - 1)
+        object_class = (val >> 36) & ((1 << 24) - 1)
+        serial = val & ((1 << 36) - 1)
+        result["general_manager"] = str(general_manager)
+        result["object_class"] = str(object_class)
+        result["serial"] = str(serial)
+
+    return result
+
+
+def parse_user_memory(buffer: str) -> Optional[str]:
+    """Extract user memory hex string from a Read Memory (0x39) response frame.
+
+    Response payload format: [pc_epc_len: 1 byte][PC: 2 bytes][EPC: N bytes][user data]
+    where pc_epc_len = byte count of (PC + EPC).
+    """
+    response_prefix = "bb0139"
+    pos = buffer.find(response_prefix)
+    if pos == -1:
+        return None
+    payload_len = int(buffer[pos + 6 : pos + 10], 16)
+    frame_len = 14 + payload_len * 2
+    frame = buffer[pos : pos + frame_len]
+    if len(frame) < frame_len or not verify_checksum(frame):
+        return None
+    payload = frame[10 : 10 + payload_len * 2]
+    pc_epc_len = int(payload[0:2], 16)
+    data_start = (1 + pc_epc_len) * 2
+    data = payload[data_start:]
+    # Return None if all zeros (empty user memory)
+    return data if data and any(c != "0" for c in data) else None
 
 
 def parse_tag(data: str) -> Optional[dict[str, str]]:
